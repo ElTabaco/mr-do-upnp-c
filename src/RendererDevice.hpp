@@ -1,10 +1,11 @@
+#pragma once
 #include <upnp/upnp.h>
-#include <string>
 
 class RendererDevice {
 public:
     RendererDevice(int httpPort, int ssdpPort);
     ~RendererDevice();
+
     void run();
 
     RendererDevice(const RendererDevice&) = delete;
