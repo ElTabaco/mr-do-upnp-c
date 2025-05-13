@@ -8,12 +8,21 @@ RendererDevice::RendererDevice(int httpPort, int /*ssdpPort*/) {
         throw std::runtime_error("UpnpInit2 failed");
     }
 
-    // Alpine uses libupnp < 1.14, so no UpnpSetSsdpPort
-    // Discovery must use default port: 1900/udp
+    const char* desc =
+        "<?xml version=\"1.0\"?>"
+        "<root xmlns=\"urn:schemas-upnp-org:device-1-0\">"
+        "  <specVersion><major>1</major><minor>0</minor></specVersion>"
+        "  <device>"
+        "    <deviceType>urn:schemas-upnp-org:device:MediaRenderer:1</deviceType>"
+        "    <friendlyName>Alpine Renderer</friendlyName>"
+        "    <manufacturer>Test</manufacturer>"
+        "    <modelName>UPnP-Renderer</modelName>"
+        "    <UDN>uuid:12345678-1234-5678-1234-567812345678</UDN>"
+        "  </device>"
+        "</root>";
 
-    const char* descUrl = "http://www.example.com/renderer/description.xml";
-    if (UpnpRegisterRootDevice2(UPNPREG_URL_DESC, descUrl,
-                                &RendererDevice::callback,
+    if (UpnpRegisterRootDevice2(UPNPREG_BUF_DESC, desc,
+                                UpnpDevice_FunPtr(&RendererDevice::callback),
                                 this, &m_deviceHandle) != UPNP_E_SUCCESS) {
         throw std::runtime_error("UpnpRegisterRootDevice2 failed");
     }
@@ -22,6 +31,7 @@ RendererDevice::RendererDevice(int httpPort, int /*ssdpPort*/) {
         throw std::runtime_error("Failed to send initial SSDP advert");
     }
 }
+
 
 RendererDevice::~RendererDevice() {
     if (m_deviceHandle >= 0) UpnpUnRegisterRootDevice(m_deviceHandle);
