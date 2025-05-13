@@ -7,30 +7,17 @@ services:
             - PGID=1000
             - DEVICE_NAME=mrUPnPc
             - TZ=Europe/Berlin
+            - RENDERER_PORT=${RENDERER_PORT:-5000}
+            - DISCOVERY_PORT=${DISCOVERY_PORT:-1900}
         ports:
-        - 49494:49494 
-        - 1900:1900
+        # Map TCP control port
+        - "${RENDERER_PORT:-5000}:${RENDERER_PORT:-5000}/tcp"
+        # SSDP is UDP → map the chosen discovery port
+        # (Many routers expect 1900, so override with caution)
+        - "${DISCOVERY_PORT:-1900}:${DISCOVERY_PORT:-1900}/udp"
         network_mode: host
         volumes:
         - ./etc/asound.conf:/etc/asound.conf
         - ./tmp/music/:/tmp/music
         hostname: myUPnPc
-        restart: unless-stopped
-    mr-do-snapserver:
-        image: riemerk/mr-do-snapserver:latest
-        container_name: mr-do-snapserver
-        environment:
-            - PUID=1000
-            - PGID=1000
-            - DEVICE_NAME=Snapserver
-            - TZ=Europe/Berlin
-        volumes:
-            - ./etc/snapserver.conf:/etc/snapserver.conf
-            - ./config/snapserver/:/root/.config/snapserver/
-            - ./tmp/music/:/tmp/music
-        ports:
-            - 1704:1704
-            - 1705:1705
-            - 1780:1780
-        network_mode: host
         restart: unless-stopped
