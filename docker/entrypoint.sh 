@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+
+# spin up PulseAudio if it isn’t already running
+pulseaudio --check 2>/dev/null || pulseaudio --start --disallow-exit
+
+# never let Kodi ask for a windowing backend
+export KODI_GL_INTERFACE=dummy
+export KODI_AIRPLAY=0
+
+exec kodi-standalone --windowing=headless --nolirc --player=PAPlayer "$@"

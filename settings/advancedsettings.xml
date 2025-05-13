@@ -1,0 +1,11 @@
+<advancedsettings>
+  <services>
+    <upnpserver>false</upnpserver>
+    <upnprenderer>true</upnprenderer>
+  </services>
+
+  <!-- lock Kodi into audio‑only mode -->
+  <video>
+    <enable>false</enable>
+  </video>
+</advancedsettings>

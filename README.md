@@ -30,7 +30,7 @@ nc -zv localhost 12345
 
 ### ARM64
 
-[![docker image size](https://img.shields.io/docker/image-size/riemerk/mr-do-upnp/latest?arch=arm64)](https://hub.docker.com/r/riemerk/mr-do-upnp)
+[![docker image size](https://img.shields.io/docker/image-size/riemerk/mr-do-upnp-c/latest?arch=arm64)](https://hub.docker.com/r/riemerk/mr-do-upnp-c)
 
 ### ARM32
 
@@ -44,3 +44,25 @@ nc -zv localhost 12345
 
 [![docker pulls](https://img.shields.io/docker/pulls/riemerk/mr-do-upnp)](https://hub.docker.com/r/riemerk/mr-do-upnp)
 
+[![docker pulls](https://img.shields.io/docker/pulls/riemerk/mr-do-upnp-c)](https://hub.docker.com/r/riemerk/mr-do-upnp-c)
+
+
+
+A complete, opinion‑ated recipe for turning Kodi ( formerly XBMC ) into a head‑less, audio‑only UPnP / DLNA renderer that you can drop into any network as a Docker container.
+Everything is built on Alpine Linux, and the image is only ~120 MiB even with the essential audio codecs.
+1. Directory layout of the project repo
+
+```console
+xbmc-upnp-audio/
+├── docker/
+│   ├── Dockerfile            # multi‑stage build (Alpine → Alpine)
+│   └── entrypoint.sh         # tiny wrapper for Kodi head‑less mode
+├── patches/                  # optional – tweak Kodi at build‑time
+│   └── 01-strip-video.diff
+├── settings/
+│   └── advancedsettings.xml  # force Kodi into audio‑only + UPnP renderer
+└── README.md                 # build / run instructions
+```
+
+    Why keep everything in one repo?
+    The Docker context stays tiny, CI/CD hooks are simple, and you can version your configuration patches alongside the build.

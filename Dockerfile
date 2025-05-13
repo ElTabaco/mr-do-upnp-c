@@ -12,7 +12,7 @@ COPY renderer.c /app/renderer.c
 WORKDIR /app
 
 # Compile the renderer code
-RUN gcc -o renderer source/renderer.c -lupnp
+RUN gcc -o renderer renderer.c -lupnp
 
 # Expose the UPnP port (can be overridden at runtime)
 ARG PORT=49152
