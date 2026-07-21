@@ -82,9 +82,15 @@ RUN cmake -S . -B /build -GNinja \
       -DENABLE_DVDCSS=OFF \
       -DENABLE_INTERNAL_FFMPEG=OFF
 
-# Build core + install.  Skip building bundled binary addons —
-# Kodi ships its own built-in audio decoders (PAPlayer uses them).
+# Build core + install.
 RUN cmake --build /build --target install
+
+# Debug: show where Kodi actually installed.
+RUN echo "=== Kodi install layout ===" && \
+    find /usr -name "kodi*" -o -name "Kodi*" 2>/dev/null | head -30 && \
+    echo "=== /usr/lib/kodi* ===" && ls -la /usr/lib/kodi* 2>/dev/null || true && \
+    echo "=== /usr/share/kodi* ===" && ls -la /usr/share/kodi* 2>/dev/null || true && \
+    echo "=== /usr/local ===" && find /usr/local -name "kodi*" 2>/dev/null | head -10 || true
 
 # Strip debug symbols from the Kodi binary (saves ~40 MB).
 RUN strip --strip-unneeded /usr/lib/kodi/kodi.bin 2>/dev/null || true
