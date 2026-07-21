@@ -2,10 +2,26 @@
   <services>
     <upnpserver>false</upnpserver>
     <upnprenderer>true</upnprenderer>
+    <!-- Allow UPnP controllers to push media to this Kodi instance -->
+    <upnpcontroller>true</upnpcontroller>
   </services>
 
-  <!-- lock Kodi into audio‑only mode -->
+  <!-- Lock Kodi into audio-only mode (no video library/gui). -->
   <video>
     <enable>false</enable>
   </video>
+
+  <!-- Use the built-in audio player (PAPlayer) for all media. -->
+  <audio>
+    <defaultplayer>PAPlayer</defaultplayer>
+  </audio>
+
+  <!-- Disable screensaver (headless, no display to protect). -->
+  <screensaver>
+    <mode>default</mode>
+    <time>0</time>
+  </screensaver>
+
+  <!-- Reduce logging noise in container. -->
+  <loglevel>WARNING</loglevel>
 </advancedsettings>

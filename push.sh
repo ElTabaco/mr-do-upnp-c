@@ -1,9 +1,31 @@
 #!/bin/bash
-VERSION=27
-ARCH=arm64
-echo ${VERSION}
+# ═══════════════════════════════════════════════════════════
+#  Build + push multi-arch images via docker buildx.
+#  Expects DOCKER_USERNAME / DOCKER_PASSWORD env vars (or token).
+# ═══════════════════════════════════════════════════════════
+set -euo pipefail
 
-#docker image push --all-tags riemerk/mr-do-upnp
-docker login -u "myusername" -p "mypassword" docker.io
-docker push riemerk/mr-do-upnp:latest
-docker push riemerk/mr-do-upnp:${VERSION}-ARCH=${ARCH}
+VERSION="${VERSION:-0.1.0}"
+IMAGE="riemerk/mr-do-upnp-c"
+CONTEXT="$(cd "$(dirname "$0")" && pwd)"
+
+echo "Building + pushing ${IMAGE}:${VERSION} (multi-arch)"
+
+# Ensure buildx builder exists
+if ! docker buildx inspect mr-do-builder >/dev/null 2>&1; then
+    docker buildx create --name mr-do-builder --use --bootstrap
+else
+    docker buildx use mr-do-builder
+fi
+
+docker buildx build \
+    --push \
+    --platform linux/amd64,linux/arm64/v8 \
+    --file "${CONTEXT}/docker/Dockerfile" \
+    --tag "${IMAGE}:${VERSION}" \
+    --tag "${IMAGE}:latest" \
+    "${CONTEXT}"
+
+echo ""
+echo "Pushed: ${IMAGE}:${VERSION} and ${IMAGE}:latest"
+echo "https://hub.docker.com/r/${IMAGE}/tags"

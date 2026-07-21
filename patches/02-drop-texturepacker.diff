@@ -1,7 +1,0 @@
-# patches/02-drop-texturepacker.diff
---- a/tools/depends/native/CMakeLists.txt
-+++ b/tools/depends/native/CMakeLists.txt
-@@
--add_subdirectory(TexturePacker)
-+# TexturePacker only matters for GUI skins; disable for audio‑only build
-+# add_subdirectory(TexturePacker)

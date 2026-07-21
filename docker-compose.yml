@@ -1,23 +1,23 @@
 services:
-    mr-do-upnp-c:
-        image: riemerk/mr-do-upnp-c:latest
-        container_name: mr-do-upnp-c
-        environment:
-            - PUID=1000
-            - PGID=1000
-            - DEVICE_NAME=mrUPnPc
-            - TZ=Europe/Berlin
-            - RENDERER_PORT=${RENDERER_PORT:-5000}
-            - DISCOVERY_PORT=${DISCOVERY_PORT:-1900}
-        ports:
-        # Map TCP control port
-        - "${RENDERER_PORT:-5000}:${RENDERER_PORT:-5000}/tcp"
-        # SSDP is UDP → map the chosen discovery port
-        # (Many routers expect 1900, so override with caution)
-        - "${DISCOVERY_PORT:-1900}:${DISCOVERY_PORT:-1900}/udp"
-        network_mode: host
-        volumes:
-        - ./etc/asound.conf:/etc/asound.conf
-        - ./tmp/music/:/tmp/music
-        hostname: myUPnPc
-        restart: unless-stopped
+  mr-do-upnp-c:
+    image: riemerk/mr-do-upnp-c:latest
+    container_name: mr-do-upnp-c
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Europe/Berlin
+      - UPNP_NAME=mr-do UPnP
+    ports:
+      # UPnP HTTP control port
+      - "49494:49494/tcp"
+      # SSDP discovery (UDP multicast 239.255.255.250)
+      - "1900:1900/udp"
+    # hostNetwork is required for UPnP/SSDP discovery to work.
+    # Uncomment the line below instead of `ports:` if your Docker
+    # setup supports it.
+    # network_mode: host
+    volumes:
+      - ./etc/asound.conf:/etc/asound.conf:ro
+      - ./tmp/music/:/tmp/music
+    hostname: mr-do-upnp-c
+    restart: unless-stopped

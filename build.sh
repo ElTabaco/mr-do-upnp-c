@@ -1,27 +1,22 @@
 #!/bin/bash
+# ═══════════════════════════════════════════════════════════
+#  Build mr-do-upnp-c locally (single-arch, for testing).
+#  Multi-arch CI builds run in GitHub Actions (see .github/workflows/).
+# ═══════════════════════════════════════════════════════════
 set -euo pipefail
-VERSION=master
-#VERSION=0.1.0
-ARCH=arm64
-echo ${VERSION}
 
-docker buildx build \
-    --push \
-    --platform linux/amd64,linux/${ARCH} \
-    --tag riemerk/mr-do-upnp-c:${VERSION} \
-    --tag riemerk/mr-do-upnp-c:latest \
-    --file carts-api/docker/Dockerfile \
-    ./carts-api
+VERSION="${VERSION:-0.1.0}"
+IMAGE="riemerk/mr-do-upnp-c"
+CONTEXT="$(cd "$(dirname "$0")" && pwd)"
 
+echo "Building ${IMAGE}:${VERSION} (local, native arch)"
 
-docker buildx build \
-    --platform linux/arm64 \
-    --tag riemerk/mr-do-upnp-c:latest .
+docker build \
+    --file "${CONTEXT}/docker/Dockerfile" \
+    --tag "${IMAGE}:${VERSION}" \
+    --tag "${IMAGE}:latest" \
+    "${CONTEXT}"
 
-
-
-docker buildx create --name riemerk/mr-do-upnp-c:latest --use --bootstrap
-
-
-docker buildx build -t riemerk/mr-do-upnp-c --platform linux/amd64,linux/arm64 --build-arg ARCH=${ARCH} .
-docker tag riemerk/mr-do-upnp-c:latest riemer/mr-do-upnp-c:${VERSION}-${ARCH}
+echo ""
+echo "Done. Image size:"
+docker images "${IMAGE}:${VERSION}" --format "{{.Repository}}:{{.Tag}}  {{.Size}}"
