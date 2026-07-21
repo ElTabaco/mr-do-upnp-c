@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libfontconfig1-dev libfreetype6-dev libfribidi-dev \
       libfstrcmp-dev libgcrypt20-dev libgl1-mesa-dev \
       libgles2-mesa-dev libglew-dev libglu1-mesa-dev \
+      libgif-dev libass-dev \
       libgpg-error-dev libiso9660-dev libjpeg-dev \
       liblcms2-dev libltdl-dev liblzo2-dev \
       libmicrohttpd-dev libnfs-dev libogg-dev \
@@ -118,7 +119,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       # Media libs
       libbluray2 libcdio19 libtag1v5 libjpeg62-turbo \
       libpng16-16 libtiff6 libfreetype6 libfontconfig1 \
-      libfribidi0 liblzo2-2 \
+      libfribidi0 liblzo2-2 libgif7 libass9 \
       # Misc Kodi deps
       libcrossguid0 libfmt9 libpcre3 libspdlog1.10 \
       libtinyxml2.6.2v5 libtinyxml2-9 libfstrcmp0 \
