@@ -61,6 +61,7 @@ RUN git clone --branch "${KODI_VERSION}" --depth 1 \
 # playback + UPnP is disabled to shrink the binary.
 RUN cmake -S . -B /build -GNinja \
       -DCMAKE_INSTALL_PREFIX=/usr \
+      -DCMAKE_INSTALL_LIBDIR=lib \
       -DCMAKE_BUILD_TYPE=Release \
       -DCORE_SYSTEM_NAME=linux \
       -DCORE_PLATFORM_NAME=x11 \
@@ -85,15 +86,9 @@ RUN cmake -S . -B /build -GNinja \
 # Build core + install.
 RUN cmake --build /build --target install
 
-# Debug: show where Kodi actually installed.
-RUN echo "=== Kodi install layout ===" && \
-    find /usr -name "kodi*" -o -name "Kodi*" 2>/dev/null | head -30 && \
-    echo "=== /usr/lib/kodi* ===" && ls -la /usr/lib/kodi* 2>/dev/null || true && \
-    echo "=== /usr/share/kodi* ===" && ls -la /usr/share/kodi* 2>/dev/null || true && \
-    echo "=== /usr/local ===" && find /usr/local -name "kodi*" 2>/dev/null | head -10 || true
-
 # Strip debug symbols from the Kodi binary (saves ~40 MB).
-RUN strip --strip-unneeded /usr/lib/kodi/kodi.bin 2>/dev/null || true
+# The actual binary is kodi-x11 (or kodi-GBM/kodi-wayland depending on platform).
+RUN find /usr/lib -name "kodi-*" -type f -executable -exec strip --strip-unneeded {} \; 2>/dev/null || true
 
 # Remove bundled GUI skins — headless, no GUI is ever shown.
 # Keep system/ (fonts, keymaps) and media/ (sounds) Kodi needs.
@@ -140,7 +135,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy Kodi install from builder
+# Copy Kodi install from builder.
+# CMAKE_INSTALL_LIBDIR=lib forces install to /usr/lib/kodi/ (not arch-specific).
 COPY --from=builder /usr/lib/kodi /usr/lib/kodi
 COPY --from=builder /usr/share/kodi /usr/share/kodi
 COPY --from=builder /usr/bin/kodi /usr/bin/kodi
