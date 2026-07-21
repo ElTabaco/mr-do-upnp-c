@@ -20,7 +20,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 # No video decoders, no game, no Wayland/GBM, no CEC, no AirTunes.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       build-essential cmake git ninja-build python3-dev python3-pil \
-      pkg-config gperf swig zip unzip curl \
+      pkg-config gperf swig zip unzip curl ca-certificates \
       autoconf automake autopoint autotools-dev gettext libtool lsb-release \
       libasound2-dev libupnp-dev \
       libavahi-client-dev libavahi-common-dev \
