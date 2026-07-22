@@ -2,6 +2,3 @@
 .gitignore
 .github
 README.md
-build.sh
-push.sh
-docker-compose.yml

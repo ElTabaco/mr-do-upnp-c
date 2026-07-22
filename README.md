@@ -1,68 +1,103 @@
-# Accessing the DLNA Server and TCP Stream
+# mr-do-upnp-c
 
-    Access the DLNA server using a DLNA client on your network at 
-    http://<docker-host-ip>:8200
-    Listen to the audio stream by connecting to the TCP stream on port 12345. Use tools like nc (Netcat) or a media player that supports streaming from TCP.
+Kodi/XBMC v21 (Omega) headless UPnP/DLNA **MediaRenderer**, built from
+[xbmc/xbmc](https://github.com/xbmc/xbmc) source.  Shows up as a cast
+target in UPnP/DLNA controller apps (VLC, BubbleUPnP, AirMusic, Windows
+"Play To", Kodi's "play using").
 
-For example, using nc to play the stream:
+Audio is rendered server-side by Kodi's built-in PAPlayer and routed via
+ALSA to a named pipe that a [Snapcast](https://github.com/badaix/snapcast)
+snapserver reads for multi-room playback.
 
-```console
-nc <docker-host-ip> 12345 | ffplay -f mp3 -
-```
-Or using VLC media player, open a network stream and input tcp://<docker-host-ip>:12345.
+## Docker image
 
-enter container
-
-```console
-docker run --rm -it -p 8200:8200 -p 12345:12345 --entrypoint sh riemerk/mr-do-upnp:latest
-
-docker run (or equivalent) can you try adding the --device /dev/snd --device /dev/bus/usb flags? 
-```
-
-## Test local and on an other machine
-
-```console
-curl http://localhost:8200 | grep "MiniDLNA status"
-nc -zv localhost 12345
-```
-
-## UPnP / dlna
-
-### ARM64
-
-[![docker image size](https://img.shields.io/docker/image-size/riemerk/mr-do-upnp-c/latest?arch=arm64)](https://hub.docker.com/r/riemerk/mr-do-upnp-c)
-
-### ARM32
-
-[![docker image size](https://img.shields.io/docker/image-size/riemerk/mr-do-upnp/latest?arch=arm)](https://hub.docker.com/r/riemerk/mr-do-upnp)
-
-### AMD64
-
-[![docker image size](https://img.shields.io/docker/image-size/riemerk/mr-do-upnp/latest?arch=amd64)](https://hub.docker.com/r/riemerk/mr-do-upnp)
-
-### Docker pulls
-
-[![docker pulls](https://img.shields.io/docker/pulls/riemerk/mr-do-upnp)](https://hub.docker.com/r/riemerk/mr-do-upnp)
-
+[![CI](https://github.com/ElTabaco/mr-do-upnp-c/actions/workflows/docker-image-upnp-c.yml/badge.svg)](https://github.com/ElTabaco/mr-do-upnp-c/actions)
+[![docker image size](https://img.shields.io/docker/image-size/riemerk/mr-do-upnp-c/latest?arch=amd64)](https://hub.docker.com/r/riemerk/mr-do-upnp-c)
 [![docker pulls](https://img.shields.io/docker/pulls/riemerk/mr-do-upnp-c)](https://hub.docker.com/r/riemerk/mr-do-upnp-c)
 
-
-
-A complete, opinion‑ated recipe for turning Kodi ( formerly XBMC ) into a head‑less, audio‑only UPnP / DLNA renderer that you can drop into any network as a Docker container.
-Everything is built on Alpine Linux, and the image is only ~120 MiB even with the essential audio codecs.
-1. Directory layout of the project repo
-
-```console
-xbmc-upnp-audio/
-├── docker/
-│   ├── Dockerfile            # multi‑stage build (Alpine → Alpine)
-│   └── entrypoint.sh         # tiny wrapper for Kodi head‑less mode
-├── patches/                  # optional – tweak Kodi at build‑time
-│   └── 01-strip-video.diff
-├── settings/
-│   └── advancedsettings.xml  # force Kodi into audio‑only + UPnP renderer
-└── README.md                 # build / run instructions
+```
+riemerk/mr-do-upnp-c:latest    # amd64, arm64
+riemerk/mr-do-upnp-c:0.1.0
 ```
 
-    Why keep everything in one repo?
-    The Docker context stays tiny, CI/CD hooks are simple, and you can version your configuration patches alongside the build.
+## How it works
+
+```
+UPnP controller app (VLC, BubbleUPnP, ...)
+        │  SSDP discovery (1900/UDP multicast)
+        ▼
+┌─────────────────────────────────────────┐
+│  Kodi v21 headless (this image)         │
+│  ├─ Xvfb virtual framebuffer (:99)      │  Kodi has no headless backend
+│  ├─ PAPlayer (audio only, no video)     │
+│  └─ ALSA default → /etc/asound.conf     │
+│         → writes /tmp/music/upnpfifo    │  named pipe (FIFO)
+└─────────────────────────────────────────┘
+        │
+        ▼
+   snapserver (reads the FIFO → broadcasts to snapclients)
+```
+
+The container is designed to run as a **sidecar** alongside snapserver in
+the same pod (see [mr-do-player](https://github.com/ElTabaco/mr-do-player)
+for the full K8s deployment).
+
+## Build
+
+Requires Docker with BuildKit.
+
+```console
+docker build -t riemerk/mr-do-upnp-c:latest -f docker/Dockerfile .
+```
+
+The Kodi compile (~1600 ninja targets) takes ~15 min on a 16-core machine.
+The final multi-stage image is ~650 MB (runtime only, builder discarded).
+
+## Run
+
+Standalone (for testing — no snapserver, audio goes to `/dev/null`):
+
+```console
+docker run -d --network host \
+  -e UPNP_NAME="Living Room" \
+  riemerk/mr-do-upnp-c:latest
+```
+
+With snapserver (production — mount `asound.conf` that routes ALSA to the
+shared FIFO):
+
+```console
+docker run -d --network host \
+  -e UPNP_NAME="Living Room" \
+  -v ./asound.conf:/etc/asound.conf:ro \
+  -v /shared/fifo/dir:/tmp/music \
+  riemerk/mr-do-upnp-c:latest
+```
+
+`--network host` is required: UPnP/SSDP uses UDP multicast (239.255.255.250)
+which Docker bridge NAT cannot forward.
+
+## Configuration
+
+| Env var      | Default        | Description                          |
+|--------------|----------------|--------------------------------------|
+| `UPNP_NAME`  | `mr-do UPnP`   | Friendly name shown in controller apps |
+| `TZ`         | `UTC`          | Timezone                             |
+
+## Architecture notes
+
+- **Xvfb**: Kodi has no headless windowing backend. We run it inside a
+  virtual X framebuffer at `DISPLAY=:99`. The GL renderer falls back to
+  `llvmpipe` (software rasterizer).
+- **ALSA-only**: PulseAudio/PipeWire dev headers are excluded at build
+  time so Kodi compiles with ALSA as the sole audio backend. This
+  guarantees audio goes to the FIFO pipe, not a pulse daemon.
+- **Non-root**: Runs as UID/GID 1000. `$HOME` is `/tmp/kodi-home` (always
+  writable via the `tmp` emptyDir in K8s).
+- **Skin**: `skin.estuary` is kept because Kodi crashes during addon
+  initialization without it, even in headless mode.
+
+## Credits
+
+- [Kodi / XBMC](https://github.com/xbmc/xbmc) — Team Kodi
+- [Snapcast](https://github.com/badaix/snapcast) — badaix
