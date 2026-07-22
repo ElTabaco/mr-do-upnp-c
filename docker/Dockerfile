@@ -141,6 +141,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       libplist3 \
       libsmbclient libnfs13 libiso9660-11 \
       libltdl7 libudev1 \
+      # SSL CA certificates (Kodi fetches addon repos via HTTPS)
+      ca-certificates \
       # PID 1 signal handler
       tini \
     && apt-get clean \

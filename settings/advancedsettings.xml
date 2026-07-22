@@ -25,5 +25,5 @@
   </screensaver>
 
   <!-- Reduce logging noise in container. -->
-  <loglevel>WARNING</loglevel>
+  <loglevel>3</loglevel>
 </advancedsettings>
