@@ -1,0 +1,26 @@
+<settings>
+  <!--
+    Pre-seeded GUI settings so Kodi boots as a UPnP renderer without
+    needing an interactive first-run setup on a display.
+
+    Note: Kodi regenerates this file on exit, so only well-known
+    stable keys are set here.  The ALSA→FIFO audio routing is
+    handled at the OS level by /etc/asound.conf, not by Kodi.
+  -->
+  <services>
+    <devicename>mr-do UPnP</devicename>
+    <upnpserver>false</upnpserver>
+    <upnprenderer>true</upnprenderer>
+    <upnpcontroller>true</upnpcontroller>
+    <useairtunes>false</useairtunes>
+    <useairplay>false</useairplay>
+  </services>
+
+  <audio>
+    <defaultplayer>PAPlayer</defaultplayer>
+  </audio>
+
+  <lookandfeel>
+    <enablerssfeed>false</enablerssfeed>
+  </lookandfeel>
+</settings>
