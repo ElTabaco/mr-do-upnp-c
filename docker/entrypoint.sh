@@ -6,23 +6,26 @@ set -e
 #
 #  Runs as UID 1000 (non-root).  The root filesystem is read-only
 #  in K8s (readOnlyRootFilesystem: true); writable mounts are:
-#    /tmp              → emptyDir (Xvfb sockets, Kodi temp)
+#    /tmp              → emptyDir (Xvfb sockets, Kodi userdata/temp)
 #    /tmp/music        → emptyDir shared with snapserver (FIFO)
-#    /home/kodi        → persistent volume (Kodi userdata)
+#
+#  We use /tmp/kodi-home as HOME (always writable via the tmp
+#  emptyDir) so Kodi can write guisettings.xml, temp/, and logs
+#  without needing a separate PVC.
 #
 #  Audio routing: Kodi PAPlayer → ALSA default → /etc/asound.conf
 #  → writes to /tmp/music/upnpfifo → snapserver reads the pipe.
 #  PulseAudio/PipeWire are not compiled in (ALSA-only build).
 # ═══════════════════════════════════════════════════════════
 
-KODI_HOME="${HOME:-/home/kodi}"
-export HOME="$KODI_HOME"
+# Use /tmp/kodi-home as HOME — always writable (tmp emptyDir).
+export HOME="/tmp/kodi-home"
 
 # ── 1. Seed Kodi config from defaults on first boot ──
 # advancedsettings.xml / guisettings.xml are baked into /defaults/
 # (read-only).  Copy them to the writable home on first run.
-USERDATA="${KODI_HOME}/.kodi/userdata"
-mkdir -p "$USERDATA" "${KODI_HOME}/.kodi/temp"
+USERDATA="${HOME}/.kodi/userdata"
+mkdir -p "$USERDATA" "${HOME}/.kodi/temp"
 if [ ! -f "$USERDATA/advancedsettings.xml" ] && [ -f /defaults/advancedsettings.xml ]; then
     cp /defaults/advancedsettings.xml "$USERDATA/"
     cp /defaults/guisettings.xml "$USERDATA/"
