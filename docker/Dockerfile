@@ -100,10 +100,10 @@ RUN cmake --build /build --target install
 # Binary is kodi-x11 (55 MB unstripped); kodi-xrandr is tiny.
 RUN strip --strip-unneeded /usr/lib/kodi/kodi-x11 /usr/lib/kodi/kodi-xrandr 2>/dev/null || true
 
-# Remove bundled GUI skins — headless, no GUI is ever shown.
-# Keep system/ (fonts, keymaps) and media/ (sounds) Kodi needs.
-RUN rm -rf /usr/share/kodi/addons/skin.* \
-           /usr/share/kodi/media/Splash.png
+# NOTE: We keep the default skin (skin.estuary).  Kodi REQUIRES a skin
+# to be present during addon initialization, even in headless mode —
+# it crashes with "addon 'skin.estuary' not installed" if missing.
+# The skin data is ~2 MB and not worth the crash risk of removing it.
 
 # ──────────────  Stage 2 — Minimal runtime  ──────────────
 FROM debian:12-slim AS runtime
@@ -147,9 +147,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Create non-root user (UID/GID 1000 to match K8s securityContext).
+# Pre-create /tmp/.X11-unix so Xvfb can start as non-root.
 RUN groupadd -g 1000 kodi && \
     useradd -u 1000 -g 1000 -d /home/kodi -s /bin/sh kodi && \
-    mkdir -p /home/kodi/.kodi/userdata /home/kodi/.kodi/temp
+    mkdir -p /home/kodi/.kodi/userdata /home/kodi/.kodi/temp && \
+    mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
 # Copy Kodi install from builder.
 # CMAKE_INSTALL_LIBDIR=lib forces install to /usr/lib/kodi/ (not arch-specific).
