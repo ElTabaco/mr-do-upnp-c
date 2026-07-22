@@ -21,6 +21,12 @@ set -e
 # Use /tmp/kodi-home as HOME — always writable (tmp emptyDir).
 export HOME="/tmp/kodi-home"
 
+# Kodi's GL subsystem writes shader cache to $HOME/.cache before our
+# entrypoint runs.  Point XDG_CACHE_HOME at the writable tmp dir so
+# it doesn't try /home/kodi/.cache (read-only root filesystem).
+export XDG_CACHE_HOME="/tmp/kodi-home/.cache"
+mkdir -p "$XDG_CACHE_HOME"
+
 # ── 1. Seed Kodi config from defaults on first boot ──
 # advancedsettings.xml / guisettings.xml are baked into /defaults/
 # (read-only).  Copy them to the writable home on first run.
