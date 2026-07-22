@@ -4,20 +4,58 @@ set -e
 # ═══════════════════════════════════════════════════════════
 #  mr-do-upnp-c entrypoint
 #
-#  Kodi has no headless windowing backend, so we launch Xvfb
-#  (a virtual framebuffer) and run Kodi inside it on DISPLAY=:99.
+#  Runs as UID 1000 (non-root).  The root filesystem is read-only
+#  in K8s (readOnlyRootFilesystem: true); writable mounts are:
+#    /tmp              → emptyDir (Xvfb sockets, Kodi temp)
+#    /tmp/music        → emptyDir shared with snapserver (FIFO)
+#    /home/kodi        → persistent volume (Kodi userdata)
 #
-#  Audio routing is handled entirely by /etc/asound.conf (mounted
-#  from the K8s ConfigMap): ALSA default → rate conversion →
-#  write to /tmp/music/upnpfifo (named pipe).  Snapserver reads
-#  the other end of that pipe for server-side playback.
-#  We must NOT start PulseAudio — it would grab the ALSA default
-#  device and bypass the pipe.
+#  Audio routing: Kodi PAPlayer → ALSA default → /etc/asound.conf
+#  → writes to /tmp/music/upnpfifo → snapserver reads the pipe.
+#  PulseAudio/PipeWire are not compiled in (ALSA-only build).
 # ═══════════════════════════════════════════════════════════
 
-# Start Xvfb on a detached display.
-Xvfb :99 -screen 0 1280x720x24 -nolisten tcp &
+KODI_HOME="${HOME:-/home/kodi}"
+export HOME="$KODI_HOME"
+
+# ── 1. Seed Kodi config from defaults on first boot ──
+# advancedsettings.xml / guisettings.xml are baked into /defaults/
+# (read-only).  Copy them to the writable home on first run.
+USERDATA="${KODI_HOME}/.kodi/userdata"
+mkdir -p "$USERDATA" "${KODI_HOME}/.kodi/temp"
+if [ ! -f "$USERDATA/advancedsettings.xml" ] && [ -f /defaults/advancedsettings.xml ]; then
+    cp /defaults/advancedsettings.xml "$USERDATA/"
+    cp /defaults/guisettings.xml "$USERDATA/"
+    echo "[entrypoint] Seeded Kodi config from /defaults/"
+fi
+
+# ── 2. Apply UPNP_NAME override (friendly device name) ──
+# Kodi reads the device name from guisettings.xml <devicename>,
+# not from an env var, so patch the file if UPNP_NAME is set.
+if [ -n "${UPNP_NAME:-}" ]; then
+    sed -i "s|<devicename>.*</devicename>|<devicename>${UPNP_NAME}</devicename>|" \
+        "$USERDATA/guisettings.xml" 2>/dev/null || true
+fi
+
+# ── 3. Ensure the ALSA→snapserver FIFO exists ──
+# In K8s an initContainer creates this; for standalone Docker we
+# create it here.  ALSA's file plugin needs a FIFO (named pipe),
+# not a regular file.
+FIFO="/tmp/music/upnpfifo"
+mkdir -p /tmp/music
+if [ ! -p "$FIFO" ]; then
+    rm -f "$FIFO"
+    mkfifo -m 0666 "$FIFO"
+fi
+
+# ── 4. Start Xvfb (virtual framebuffer) ──
+# Kodi has no headless backend; Xvfb provides a dummy X display.
+Xvfb :99 -screen 0 1280x720x24 -nolisten tcp -ac &
 XVFB_PID=$!
+export DISPLAY=:99
+
+# Clean up Xvfb when the script exits (Kodi crash, signal, etc.)
+trap 'kill "$XVFB_PID" 2>/dev/null' EXIT INT TERM
 
 # Give Xvfb a moment to create the socket.
 sleep 1
@@ -27,18 +65,15 @@ if ! kill -0 "$XVFB_PID" 2>/dev/null; then
 fi
 echo "[entrypoint] Xvfb started (PID $XVFB_PID) on :99"
 
-# Kodi's UPnP renderer must know its own IP to build correct
-# device-description URLs.  On hostNetwork this is the node's LAN IP.
-# Let Kodi auto-detect; override via DEVICE_IP if needed.
-export DISPLAY=:99
-export KODI_AIRPLAY=0
-export KODI_AIRPLAYY=0
-
-# Friendly name override — shows up in UPnP/DLNA controller apps.
+# ── 5. Launch Kodi ──
+# Valid Kodi v21 CLI flags: --standalone, --debug, --settings=,
+# -p/--portable, -fs.  (--player and --nolirc do NOT exist.)
+# --standalone = run without a window manager / desktop session.
+# PAPlayer is enforced via <defaultplayer> in advancedsettings.xml.
 FRIENDLY_NAME="${UPNP_NAME:-mr-do UPnP}"
 echo "[entrypoint] Starting Kodi UPnP renderer as '$FRIENDLY_NAME'"
 
-# kodi-standalone wraps kodi with D-Bus/session setup.
-# --player=PAPlayer forces the built-in audio player (no video).
-# --nolirc disables infrared remote.
-exec kodi-standalone --player=PAPlayer --nolirc
+# Call the kodi wrapper directly (not kodi-standalone) to avoid the
+# D-Bus session-bus and PulseAudio setup that kodi-standalone.sh does.
+# The wrapper sets up KODI_DATA, CRASHLOG_DIR and execs kodi-x11.
+exec /usr/bin/kodi --standalone
