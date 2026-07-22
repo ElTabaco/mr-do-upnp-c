@@ -53,6 +53,9 @@ fi
 
 # ── 4. Start Xvfb (virtual framebuffer) ──
 # Kodi has no headless backend; Xvfb provides a dummy X display.
+# Remove stale lock files from a previous crash (K8s container restart
+# reuses the same emptyDir, so /tmp/.X99-lock can persist).
+rm -f /tmp/.X99-lock /tmp/.X11-unix/X99
 Xvfb :99 -screen 0 1280x720x24 -nolisten tcp -ac &
 XVFB_PID=$!
 export DISPLAY=:99
