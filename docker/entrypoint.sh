@@ -41,20 +41,26 @@ fi
 # ── 2. Apply UPNP_NAME override (friendly device name) ──
 # Kodi reads the device name from guisettings.xml <devicename>,
 # not from an env var, so patch the file if UPNP_NAME is set.
+# Use awk instead of sed to avoid injection via sed metacharacters
+# (|, &, backslashes) in the UPNP_NAME value.
 if [ -n "${UPNP_NAME:-}" ]; then
-    sed -i "s|<devicename>.*</devicename>|<devicename>${UPNP_NAME}</devicename>|" \
-        "$USERDATA/guisettings.xml" 2>/dev/null || true
+    awk -v name="$UPNP_NAME" \
+        '{gsub(/<devicename>.*<\/devicename>/, "<devicename>" name "</devicename>"); print}' \
+        "$USERDATA/guisettings.xml" > "$USERDATA/guisettings.xml.tmp" 2>/dev/null && \
+        mv "$USERDATA/guisettings.xml.tmp" "$USERDATA/guisettings.xml" || \
+        rm -f "$USERDATA/guisettings.xml.tmp"
 fi
 
 # ── 3. Ensure the ALSA→snapserver FIFO exists ──
 # In K8s an initContainer creates this; for standalone Docker we
 # create it here.  ALSA's file plugin needs a FIFO (named pipe),
-# not a regular file.
+# not a regular file.  The umask is cleared so the FIFO gets mode
+# 0666 (readable+writable by snapserver running as another UID).
 FIFO="/tmp/music/upnpfifo"
 mkdir -p /tmp/music
 if [ ! -p "$FIFO" ]; then
     rm -f "$FIFO"
-    mkfifo -m 0666 "$FIFO"
+    (umask 0 && mkfifo -m 0666 "$FIFO")
 fi
 
 # ── 4. Start Xvfb (virtual framebuffer) ──
@@ -66,11 +72,14 @@ Xvfb :99 -screen 0 1280x720x24 -nolisten tcp -ac &
 XVFB_PID=$!
 export DISPLAY=:99
 
-# Clean up Xvfb when the script exits (Kodi crash, signal, etc.)
-trap 'kill "$XVFB_PID" 2>/dev/null' EXIT INT TERM
+# Wait for the X socket to appear (more reliable than a fixed sleep).
+i=0
+while [ $i -lt 50 ]; do
+    [ -S /tmp/.X11-unix/X99 ] && break
+    sleep 0.1
+    i=$((i + 1))
+done
 
-# Give Xvfb a moment to create the socket.
-sleep 1
 if ! kill -0 "$XVFB_PID" 2>/dev/null; then
     echo "[entrypoint] FATAL: Xvfb failed to start" >&2
     exit 1
@@ -82,10 +91,16 @@ echo "[entrypoint] Xvfb started (PID $XVFB_PID) on :99"
 # -p/--portable, -fs.  (--player and --nolirc do NOT exist.)
 # --standalone = run without a window manager / desktop session.
 # PAPlayer is enforced via <defaultplayer> in advancedsettings.xml.
-FRIENDLY_NAME="${UPNP_NAME:-mr-do UPnP}"
-echo "[entrypoint] Starting Kodi UPnP renderer as '$FRIENDLY_NAME'"
+echo "[entrypoint] Starting Kodi UPnP renderer as '${UPNP_NAME:-mr-do UPnP}'"
 
-# Call the kodi wrapper directly (not kodi-standalone) to avoid the
-# D-Bus session-bus and PulseAudio setup that kodi-standalone.sh does.
-# The wrapper sets up KODI_DATA, CRASHLOG_DIR and execs kodi-x11.
-exec /usr/bin/kodi --standalone
+# Run kodi in the foreground (NOT exec) so the trap fires on exit
+# and Xvfb gets a clean SIGTERM instead of relying on PID namespace
+# teardown.
+/usr/bin/kodi --standalone &
+KODI_PID=$!
+
+# Clean up Xvfb when Kodi exits (crash, signal, etc.)
+trap 'kill "$KODI_PID" "$XVFB_PID" 2>/dev/null' EXIT INT TERM
+
+# Wait for Kodi to exit.  When it does, the trap kills Xvfb.
+wait "$KODI_PID"

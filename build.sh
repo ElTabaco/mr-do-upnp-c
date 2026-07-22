@@ -5,7 +5,8 @@
 # ═══════════════════════════════════════════════════════════
 set -euo pipefail
 
-VERSION="${VERSION:-0.1.0}"
+VERSION="${VERSION:-$(git describe --tags --always --dirty 2>/dev/null | sed 's/^v//' | cut -d- -f1)}"
+[ -z "$VERSION" ] && VERSION="0.0.0-dev"
 IMAGE="riemerk/mr-do-upnp-c"
 CONTEXT="$(cd "$(dirname "$0")" && pwd)"
 
