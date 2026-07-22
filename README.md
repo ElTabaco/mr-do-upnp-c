@@ -20,7 +20,7 @@ audio goes into the Snapcast pipeline → plays on all snapclients.
 
 ```
 riemerk/mr-do-upnp-c:latest    # amd64, arm64
-riemerk/mr-do-upnp-c:0.1.0
+riemerk/mr-do-upnp-c:0.2.0
 ```
 
 ## How it works
