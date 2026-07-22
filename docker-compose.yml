@@ -1,0 +1,50 @@
+# docker-compose.yml — full UPnP renderer + Snapcast server stack.
+#
+# Kodi receives UPnP/DLNA cast requests, renders audio via PAPlayer,
+# and writes PCM to a named pipe. Snapserver reads the pipe and
+# broadcasts to all connected snapclients (multi-room audio).
+#
+# Usage:
+#   mkdir -p tmp/music && mkfifo -m 666 tmp/music/upnpfifo
+#   docker compose up -d
+
+services:
+  mr-do-upnp-c:
+    image: riemerk/mr-do-upnp-c:latest
+    container_name: mr-do-upnp-c
+    environment:
+      - TZ=Europe/Berlin
+      - UPNP_NAME=mr-do UPnP
+    # hostNetwork is required: UPnP/SSDP discovery uses UDP multicast
+    # (239.255.255.250:1900) which Docker bridge NAT cannot forward.
+    network_mode: host
+    volumes:
+      - ./etc/asound.conf:/etc/asound.conf:ro
+      - ./tmp/music:/tmp/music
+    depends_on:
+      init-fifo:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # Create the named pipe before Kodi or snapserver opens it.
+  init-fifo:
+    image: busybox:1.36
+    container_name: mr-do-fifo
+    command: ["sh", "-c", "umask 0 && rm -f /tmp/music/upnpfifo && mkfifo -m 0666 /tmp/music/upnpfifo"]
+    volumes:
+      - ./tmp/music:/tmp/music
+    restart: "no"
+
+  mr-do-snapserver:
+    image: riemerk/mr-do-snapserver:latest
+    container_name: mr-do-snapserver
+    environment:
+      - TZ=Europe/Berlin
+    network_mode: host
+    volumes:
+      - ./etc/snapserver.conf:/etc/snapserver.conf:ro
+      - ./tmp/music:/tmp/music
+    depends_on:
+      init-fifo:
+        condition: service_completed_successfully
+    restart: unless-stopped

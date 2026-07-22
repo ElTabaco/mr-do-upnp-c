@@ -1,13 +1,16 @@
 # mr-do-upnp-c
 
-Kodi/XBMC v21 (Omega) headless UPnP/DLNA **MediaRenderer**, built from
-[xbmc/xbmc](https://github.com/xbmc/xbmc) source.  Shows up as a cast
-target in UPnP/DLNA controller apps (VLC, BubbleUPnP, AirMusic, Windows
-"Play To", Kodi's "play using").
+UPnP/DLNA **MediaRenderer** that feeds audio into
+[Snapcast](https://github.com/badaix/snapcast) for multi-room playback.
 
-Audio is rendered server-side by Kodi's built-in PAPlayer and routed via
-ALSA to a named pipe that a [Snapcast](https://github.com/badaix/snapcast)
-snapserver reads for multi-room playback.
+Built from [Kodi/XBMC v21 (Omega)](https://github.com/xbmc/xbmc) source —
+the same UPnP stack Kodi itself ships, so it shows up reliably as a cast
+target in VLC, BubbleUPnP, AirMusic, Windows "Play To", etc.
+
+**This repo exists to provide the UPnP/DLNA front-end for the
+[mr-do-player](https://github.com/ElTabaco/mr-do-player) Snapcast
+stack.** The whole point is: cast to this device from any UPnP app →
+audio goes into the Snapcast pipeline → plays on all snapclients.
 
 ## Docker image
 
@@ -23,79 +26,106 @@ riemerk/mr-do-upnp-c:0.1.0
 ## How it works
 
 ```
-UPnP controller app (VLC, BubbleUPnP, ...)
-        │  SSDP discovery (1900/UDP multicast)
-        ▼
-┌─────────────────────────────────────────┐
-│  Kodi v21 headless (this image)         │
-│  ├─ Xvfb virtual framebuffer (:99)      │  Kodi has no headless backend
-│  ├─ PAPlayer (audio only, no video)     │
-│  └─ ALSA default → /etc/asound.conf     │
-│         → writes /tmp/music/upnpfifo    │  named pipe (FIFO)
-└─────────────────────────────────────────┘
+Phone / laptop running a UPnP controller app
+        │
+        │  SSDP discovery (1900/UDP multicast 239.255.255.250)
+        │  → finds "mr-do UPnP" as a MediaRenderer
+        │  → user picks a song and casts to it
         │
         ▼
-   snapserver (reads the FIFO → broadcasts to snapclients)
+┌──────────────────────────────────────────────┐
+│  mr-do-upnp-c (this image)                   │
+│                                              │
+│  Kodi v21 headless under Xvfb                │
+│  ├─ PAPlayer renders the audio               │
+│  ├─ ALSA default device                      │
+│  └─ /etc/asound.conf routes to a file plugin │
+│         → writes /tmp/music/upnpfifo (FIFO)  │
+└──────────────────────────────────────────────┘
+        │  raw PCM (48000 Hz, S16_LE, stereo)
+        ▼
+┌──────────────────────────────────────────────┐
+│  snapserver                                  │
+│  ├─ reads /tmp/music/upnpfifo                │
+│  ├─ encodes as FLAC                          │
+│  └─ broadcasts to all snapclients            │
+└──────────────────────────────────────────────┘
+        │
+        ▼
+   snapclients (speakers throughout the house)
 ```
 
-The container is designed to run as a **sidecar** alongside snapserver in
-the same pod (see [mr-do-player](https://github.com/ElTabaco/mr-do-player)
-for the full K8s deployment).
+The FIFO pipe (`/tmp/music/upnpfifo`) is the bridge between this container
+and snapserver. In K8s both containers share an emptyDir at `/tmp/music`;
+in Docker Compose they share a host directory.
+
+## Quick start (Docker Compose)
+
+The included `docker-compose.yml` runs the full stack: this renderer +
+snapserver + an init container that creates the FIFO.
+
+```console
+# Create the shared dir + FIFO
+mkdir -p tmp/music
+
+# Start the full stack
+docker compose up -d
+```
+
+Then open a UPnP controller app on your phone (e.g. BubbleUPnP, VLC) and
+cast to "mr-do UPnP". Connect snapclients to the snapserver to hear the
+audio on your speakers.
 
 ## Build
 
-Requires Docker with BuildKit.
-
 ```console
-docker build -t riemerk/mr-do-upnp-c:latest -f docker/Dockerfile .
+# Local (native arch)
+./build.sh
+
+# Multi-arch push to Docker Hub (needs docker login + buildx)
+VERSION=0.1.0 ./push.sh
 ```
 
 The Kodi compile (~1600 ninja targets) takes ~15 min on a 16-core machine.
-The final multi-stage image is ~650 MB (runtime only, builder discarded).
+The final multi-stage image is ~650 MB (builder stage discarded).
 
-## Run
+## Files
 
-Standalone (for testing — no snapserver, audio goes to `/dev/null`):
-
-```console
-docker run -d --network host \
-  -e UPNP_NAME="Living Room" \
-  riemerk/mr-do-upnp-c:latest
+```
+docker/
+├── Dockerfile              # Multi-stage: build Kodi from source → slim runtime
+└── entrypoint.sh           # Xvfb + config seeding + mkfifo + Kodi launch
+etc/
+├── asound.conf             # ALSA → FIFO pipe routing (used by Kodi PAPlayer)
+└── snapserver.conf         # Snapserver config (reads the FIFO, encodes FLAC)
+settings/
+├── advancedsettings.xml    # UPnP renderer=ON, audio-only, PAPlayer default
+└── guisettings.xml         # Pre-seeded device name + service flags
+docker-compose.yml          # Full stack: renderer + init-fifo + snapserver
+build.sh / push.sh          # Build / push helpers
 ```
 
-With snapserver (production — mount `asound.conf` that routes ALSA to the
-shared FIFO):
+## Environment variables
 
-```console
-docker run -d --network host \
-  -e UPNP_NAME="Living Room" \
-  -v ./asound.conf:/etc/asound.conf:ro \
-  -v /shared/fifo/dir:/tmp/music \
-  riemerk/mr-do-upnp-c:latest
-```
+| Var         | Default       | Description                            |
+|-------------|---------------|----------------------------------------|
+| `UPNP_NAME` | `mr-do UPnP`  | Friendly name in UPnP controller apps  |
+| `TZ`        | `UTC`         | Timezone                               |
 
-`--network host` is required: UPnP/SSDP uses UDP multicast (239.255.255.250)
-which Docker bridge NAT cannot forward.
+## Design decisions
 
-## Configuration
-
-| Env var      | Default        | Description                          |
-|--------------|----------------|--------------------------------------|
-| `UPNP_NAME`  | `mr-do UPnP`   | Friendly name shown in controller apps |
-| `TZ`         | `UTC`          | Timezone                             |
-
-## Architecture notes
-
+- **Kodi from source** (not gmediarender): Kodi's UPnP stack (Platinum)
+  has the broadest device compatibility. The previous gmediarender image
+  had renderer discovery issues.
 - **Xvfb**: Kodi has no headless windowing backend. We run it inside a
-  virtual X framebuffer at `DISPLAY=:99`. The GL renderer falls back to
-  `llvmpipe` (software rasterizer).
-- **ALSA-only**: PulseAudio/PipeWire dev headers are excluded at build
-  time so Kodi compiles with ALSA as the sole audio backend. This
-  guarantees audio goes to the FIFO pipe, not a pulse daemon.
-- **Non-root**: Runs as UID/GID 1000. `$HOME` is `/tmp/kodi-home` (always
-  writable via the `tmp` emptyDir in K8s).
-- **Skin**: `skin.estuary` is kept because Kodi crashes during addon
-  initialization without it, even in headless mode.
+  virtual X framebuffer. GL falls back to `llvmpipe` (software rasterizer).
+- **ALSA-only build**: PulseAudio/PipeWire dev headers are excluded at
+  compile time so Kodi can't accidentally route audio to a pulse daemon
+  instead of the FIFO pipe.
+- **Non-root**: Runs as UID/GID 1000. `$HOME` is `/tmp/kodi-home` (the
+  `tmp` emptyDir in K8s is always writable).
+- **Skin kept**: `skin.estuary` stays because Kodi crashes during addon
+  initialization without it, even headless.
 
 ## Credits
 
