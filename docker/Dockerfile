@@ -17,21 +17,23 @@ FROM debian:12-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
 
-# Runtime packages — gmediarender + GStreamer ALSA + minimal codecs.
-# gstreamer1.0-plugins-good: MP3, FLAC, OGG, WAV, AAC
+# Runtime packages — gmediarender + GStreamer ALSA + codecs.
+# gstreamer1.0-libav: MP3, AAC, WMA, Opus (via ffmpeg — REQUIRED for MP3)
+# gstreamer1.0-plugins-good: FLAC, OGG, WAV, MP3 (mpg123)
 # gstreamer1.0-plugins-base: ALSA sink, decodebin, volume
-# libasound2: ALSA userspace (reads /etc/asound.conf)
+# gstreamer1.0-alsa: ALSA audio sink plugin
 # tini: PID 1 signal handling
 RUN apt-get update && apt-get install -y --no-install-recommends \
       gmediarender \
       gstreamer1.0-plugins-base \
       gstreamer1.0-plugins-good \
+      gstreamer1.0-libav \
       gstreamer1.0-alsa \
       libasound2 \
       tini \
       ca-certificates \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* /usr/share/doc /usr/share/man
 
 # Create non-root user (UID/GID 1000 to match K8s securityContext).
 RUN groupadd -g 1000 upnp && \
