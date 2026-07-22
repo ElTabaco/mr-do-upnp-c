@@ -105,12 +105,58 @@ docker-compose.yml          # Full stack: renderer + init-fifo + snapserver
 build.sh / push.sh          # Build / push helpers
 ```
 
-## Environment variables
+## Configuration
 
-| Var         | Default       | Description                            |
-|-------------|---------------|----------------------------------------|
-| `UPNP_NAME` | `mr-do UPnP`  | Friendly name in UPnP controller apps  |
-| `TZ`        | `UTC`         | Timezone                               |
+### Environment variables
+
+| Var         | Default       | Description                                  |
+|-------------|---------------|----------------------------------------------|
+| `UPNP_NAME` | `mr-do UPnP`  | Friendly name shown in UPnP controller apps  |
+| `TZ`        | `UTC`         | Timezone (e.g. `Europe/Berlin`)              |
+
+### Ports
+
+| Port      | Protocol | Purpose                                              |
+|-----------|----------|------------------------------------------------------|
+| `49494`   | TCP      | UPnP HTTP control — device description + SOAP actions |
+| `1900`    | UDP      | SSDP discovery (multicast 239.255.255.250)            |
+
+`hostNetwork: true` (K8s) or `network_mode: host` (Docker) is required —
+SSDP multicast cannot traverse Docker bridge NAT or MetalLB L2.
+
+### Volumes / mounts
+
+| Path                 | Type        | Why                                                |
+|----------------------|-------------|----------------------------------------------------|
+| `/etc/asound.conf`   | ConfigMap / file (ro) | ALSA routing to FIFO — see `etc/asound.conf` |
+| `/tmp/music`         | shared dir  | Contains the FIFO pipe, shared with snapserver     |
+| `/tmp/music/upnpfifo`| named pipe  | The bridge: Kodi writes PCM → snapserver reads     |
+| `/tmp`               | emptyDir    | Writable: Xvfb sockets, Kodi `$HOME` (`/tmp/kodi-home`) |
+
+### User
+
+Runs as **UID/GID 1000** (non-root). The `tmp` volume must be writable
+by UID 1000.
+
+### Audio format
+
+Kodi PAPlayer outputs stereo PCM. The ALSA `asound.conf` rate-converts
+and writes raw `S16_LE` at `48000 Hz` to the FIFO. Snapserver must read
+the same format:
+
+```
+sampleformat = 48000:16:2    # 48000 Hz, 16-bit, stereo
+codec = flac                 # snapserver encodes for network transport
+```
+
+If you change the sample rate in `asound.conf`, update `snapserver.conf`
+to match.
+
+### Build arguments
+
+| Arg              | Default       | Description                          |
+|------------------|---------------|--------------------------------------|
+| `KODI_VERSION`   | `21.3-Omega`  | xbmc/xbmc git tag to build from      |
 
 ## Design decisions
 
