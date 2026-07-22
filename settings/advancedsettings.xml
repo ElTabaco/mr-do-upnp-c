@@ -1,5 +1,7 @@
 <advancedsettings>
   <services>
+    <!-- Master UPnP switch — must be ON for renderer/controller to work -->
+    <upnp>true</upnp>
     <upnpserver>false</upnpserver>
     <upnprenderer>true</upnprenderer>
     <!-- Allow UPnP controllers to push media to this Kodi instance -->
