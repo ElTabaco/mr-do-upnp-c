@@ -38,11 +38,12 @@ Phone / laptop running a UPnP controller app
 │                                              │
 │  gmediarender (UPnP MediaRenderer)           │
 │  ├─ GStreamer decodes MP3/FLAC/AAC/OGG       │
+│  ├─ GStreamer audioresample (sinc, q=10)     │
 │  ├─ GStreamer alsasink → ALSA default        │
 │  └─ /etc/asound.conf routes to a file plugin │
 │         → writes /tmp/music/upnpfifo (FIFO)  │
 └──────────────────────────────────────────────┘
-        │  raw PCM (48000 Hz, S16_LE, stereo)
+        │  raw PCM (44100 Hz, S16_LE, stereo)
         ▼
 ┌──────────────────────────────────────────────┐
 │  snapserver                                  │
@@ -89,6 +90,9 @@ docker compose up -d
 | Var         | Default       | Description                                  |
 |-------------|---------------|----------------------------------------------|
 | `UPNP_NAME` | `mr-do UPnP`  | Friendly name shown in UPnP controller apps  |
+| `UPNP_UUID` | derived from `UPNP_NAME` (MD5) | UPnP device UUID (stable across restarts) |
+| `SAMPLE_RATE` | `44100` | Output rate (Hz). Must equal `rate` in `/etc/asound.conf` and snapserver's `sampleformat`. |
+| `RESAMPLE_QUALITY` | `10` | GStreamer `audioresample` quality 0–10 (GStreamer default 4), used only for files whose rate differs from `SAMPLE_RATE` |
 | `TZ`        | `UTC`         | Timezone                                     |
 
 ### Ports
@@ -112,10 +116,24 @@ docker compose up -d
 ### Audio format
 
 ```
-sampleformat = 48000:16:2    # 48000 Hz, 16-bit, stereo
+sampleformat = 44100:16:2    # 44100 Hz, 16-bit, stereo
 ```
 
-Must match between `etc/asound.conf` and `etc/snapserver.conf`.
+Must match between `SAMPLE_RATE`, `rate` in `etc/asound.conf` and `etc/snapserver.conf`.
+44.1 kHz because most music (CD, most streams) is 44.1 kHz: those files are not resampled.
+
+Resampling (files at other rates, e.g. 48/96 kHz) is done by GStreamer `audioresample`
+(windowed sinc, `quality=RESAMPLE_QUALITY`) before `alsasink`, not by ALSA's `rate` plugin
+(linear interpolation; no alsa-plugins resamplers in the image). Measured in the container
+(48 kHz test tones, 15 kHz and 1 kHz, -6 dBFS, output 44.1 kHz S16):
+
+| Path | SNR 15 kHz | SNR 1 kHz | 44.1 kHz input |
+|---|---|---|---|
+| ALSA `rate` plugin (before) | 13 dB | 64 dB | bit-exact |
+| GStreamer `audioresample quality=10` (now) | 79 dB | 79 dB | bit-exact |
+
+79 dB is the limit of S16 without dither at -6 dBFS; a float intermediate stage would
+reach 89 dB but dropped about 0.4 s of audio at stream start through the FIFO in tests.
 
 ### User
 
